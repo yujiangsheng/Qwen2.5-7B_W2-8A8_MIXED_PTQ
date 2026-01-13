@@ -1,0 +1,13 @@
+# Qwen2.5-7B 混合精度PTQ依赖
+# Mixed-Precision PTQ Dependencies
+
+# 核心依赖
+torch>=2.0.0
+transformers>=4.35.0
+datasets>=2.14.0
+numpy>=1.24.0
+tqdm>=4.65.0
+
+# 可选依赖 (按需安装)
+# accelerate>=0.24.0  # 用于多GPU/自动设备映射
+# bitsandbytes>=0.41.0  # 用于8-bit加载 (仅CUDA)
