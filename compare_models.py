@@ -175,8 +175,8 @@ def main():
                         help="混合精度配置文件路径")
     parser.add_argument('--prompt', type=str, default=None,
                         help="自定义测试提示（可选）")
-    parser.add_argument('--max_tokens', type=int, default=150,
-                        help="最大生成token数")
+    parser.add_argument('--max_tokens', type=int, default=200,
+                        help="最大生成token数（默认 200）")
     
     args = parser.parse_args()
     

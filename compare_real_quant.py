@@ -177,8 +177,8 @@ def main():
     parser.add_argument('--gguf_path', type=str, 
                         default="models/Qwen2.5-7B-Instruct-Q4_K_M.gguf",
                         help="GGUF 模型路径")
-    parser.add_argument('--max_tokens', type=int, default=100,
-                        help="最大生成 token 数")
+    parser.add_argument('--max_tokens', type=int, default=200,
+                        help="最大生成 token 数（默认 200）")
     
     args = parser.parse_args()
     device = get_device()
