@@ -19,6 +19,14 @@
 | 内存节省 | - | ~69% |
 | 推理质量 | 基准 | 接近原始 |
 
+### 🚀 真实量化性能 (llama.cpp + Q4_K_M)
+
+| 指标 | 原始模型 (FP32) | Q4_K_M (4-bit) | 提升 |
+|------|-----------------|----------------|------|
+| 内存占用 | ~30.5 GB | ~4.7 GB | **↓ 84.6%** |
+| 推理速度 | 14.7 tok/s | 76.1 tok/s | **↑ 5.2x** |
+| 平均加速比 | 1.0x | 5.6x | **5.6倍加速** |
+
 典型配置（196层）:
 - W2层: 39个 (低敏感度层)
 - W4层: 87个 (中敏感度层)  
@@ -72,6 +80,20 @@ python compare_models.py
 python compare_models.py --prompt "请解释什么是神经网络"
 ```
 
+### 5. 真实量化推理 (llama.cpp + Metal 加速)
+
+```bash
+# 下载 GGUF 量化模型
+huggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF \
+    Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir models
+
+# 安装 llama-cpp-python (Metal 加速)
+CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
+
+# 运行真实量化对比测试
+python compare_real_quant.py
+```
+
 ## 📁 项目结构
 
 ```
@@ -89,7 +111,9 @@ Qwen2.5-7B_W2A8/
 │   └── create_mock_input()     # 创建模拟输入
 ├── mixed_precision_ptq.py      # 主量化程序
 ├── test_mixed_precision.py     # 推理测试脚本
-└── compare_models.py           # 量化vs原始模型对比测试
+├── compare_models.py           # 量化vs原始模型对比测试
+├── compare_real_quant.py       # 真实量化推理对比 (llama.cpp)
+└── real_quant_inference.py     # 真实量化推理工具
 ```
 
 ## 🔧 核心参数
