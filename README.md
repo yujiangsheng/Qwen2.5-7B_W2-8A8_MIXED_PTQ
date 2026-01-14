@@ -62,6 +62,16 @@ python test_mixed_precision.py
 python test_mixed_precision.py --prompt "解释什么是量子计算"
 ```
 
+### 4. 对比测试（量化 vs 原始模型）
+
+```bash
+# 运行完整对比测试（8个测试用例）
+python compare_models.py
+
+# 自定义测试问题
+python compare_models.py --prompt "请解释什么是神经网络"
+```
+
 ## 📁 项目结构
 
 ```
@@ -78,7 +88,8 @@ Qwen2.5-7B_W2A8/
 │   ├── get_calib_dataset()     # 加载校准数据
 │   └── create_mock_input()     # 创建模拟输入
 ├── mixed_precision_ptq.py      # 主量化程序
-└── test_mixed_precision.py     # 推理测试脚本
+├── test_mixed_precision.py     # 推理测试脚本
+└── compare_models.py           # 量化vs原始模型对比测试
 ```
 
 ## 🔧 核心参数
