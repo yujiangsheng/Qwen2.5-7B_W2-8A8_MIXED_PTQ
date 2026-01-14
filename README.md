@@ -297,6 +297,19 @@ python compare_real_quant.py
 python mixed_precision_ptq.py --target_compression 0.35
 ```
 
+### Q: 量化模型输出的句子不完整？
+
+**A**: 这是 **token 数量限制**问题，不是量化质量问题。
+
+当输出达到 `max_tokens` 上限时，生成会被强制停止，导致句子被截断。解决方法：
+
+```bash
+# 增加最大 token 数
+python compare_real_quant.py --max_tokens 200
+```
+
+> 💡 **重要说明**：量化模型的回答质量与原始模型接近。当模型自然结束时（未达到 token 上限），句子是完整的。截断是 token 限制造成的，与量化无关。
+
 ---
 
 ## 📚 参考文献
