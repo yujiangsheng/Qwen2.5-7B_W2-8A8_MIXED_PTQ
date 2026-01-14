@@ -108,8 +108,8 @@
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-username/Qwen2.5-7B_W2A8_Mixed_PTQ.git
-cd Qwen2.5-7B_W2A8_Mixed_PTQ
+git clone https://github.com/your-username/Qwen2.5-7B_W2-8A8_MIXED_PTQ.git
+cd Qwen2.5-7B_W2-8A8_MIXED_PTQ
 
 # 创建虚拟环境
 python3 -m venv .venv
@@ -149,7 +149,7 @@ python compare_three_models.py --max_tokens 200
 ## 📁 项目结构
 
 ```
-Qwen2.5-7B_W2A8_Mixed_PTQ/
+Qwen2.5-7B_W2-8A8_MIXED_PTQ/
 │
 ├── 📄 README.md                     # 项目说明文档
 ├── 📄 requirements.txt              # Python 依赖
