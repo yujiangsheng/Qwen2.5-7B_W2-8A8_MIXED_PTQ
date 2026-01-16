@@ -1,442 +1,259 @@
-# Qwen2.5-7B 混合精度量化项目
+# 🚀 Qwen2.5-7B 混合精度量化 (W2/W4/W8 + A8)
 
 <p align="center">
   <img src="https://img.shields.io/badge/Python-3.9+-blue.svg" alt="Python">
   <img src="https://img.shields.io/badge/PyTorch-2.0+-ee4c2c.svg" alt="PyTorch">
-  <img src="https://img.shields.io/badge/License-MIT-green.svg" alt="License">
+  <img src="https://img.shields.io/badge/Quantization-W2%2FW4%2FW8%20%2B%20A8-green.svg" alt="Quantization">
   <img src="https://img.shields.io/badge/Platform-macOS%20|%20Linux%20|%20Windows-lightgrey.svg" alt="Platform">
 </p>
 
-基于遗传算法优化的混合精度后训练量化（Mixed-Precision PTQ）框架，专门针对 **Qwen2.5-7B-Instruct** 大语言模型设计。
+基于遗传算法优化的 **混合精度后训练量化 (Mixed-Precision PTQ)** 框架，专为 Qwen2.5-7B 大语言模型设计。
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│  量化策略: W2/W4/W8 + A8 (权重可变位宽 + 固定8位激活)               │
+├─────────────────────────────────────────────────────────────────────┤
+│  • W2 + A8: 低敏感层 → 最大压缩 (1/8 原始大小)                      │
+│  • W4 + A8: 中敏感层 → 平衡压缩 (1/4 原始大小)                      │
+│  • W8 + A8: 高敏感层 → 保持精度 (1/2 原始大小)                      │
+└─────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## 📖 目录
+## 📋 目录
 
-- [项目概述](#-项目概述)
-- [核心特性](#-核心特性)
-- [重要概念](#-重要概念模拟量化-vs-真实量化)
 - [快速开始](#-快速开始)
-- [项目结构](#-项目结构)
+- [项目架构](#-项目架构)
 - [使用指南](#-使用指南)
-- [命令行参数](#-命令行参数)
-- [技术原理](#-技术原理)
+- [核心概念](#-核心概念)
 - [性能对比](#-性能对比)
 - [常见问题](#-常见问题)
-- [参考文献](#-参考文献)
 
 ---
 
-## 🎯 项目概述
+## ⚡ 快速开始
 
-本项目实现了一个完整的混合精度量化工作流：
-
-1. **智能配置搜索**：使用遗传算法为每一层找到最优的量化位宽 (W2/W4/W8)
-2. **敏感度分析**：自动识别对量化敏感的层，采用保守策略
-3. **GGUF 导出**：将配置导出为 llama.cpp 兼容的 GGUF 格式
-4. **性能对比**：与原始模型和统一量化模型进行全面对比
-
----
-
-## ✨ 核心特性
-
-| 特性 | 说明 |
-|------|------|
-| 🧬 **遗传算法优化** | 全局搜索最优的逐层位宽配置，避免局部最优 |
-| 🎯 **混合精度量化** | 敏感层 W8，普通层 W4，非敏感层 W2 |
-| 🔧 **SmoothQuant** | 通过激活值平滑减少量化误差 |
-| 📦 **GGUF 导出** | 完全兼容 llama.cpp 的真实量化推理 |
-| ⚡ **多设备支持** | CUDA / MPS (Apple Silicon) / CPU |
-| 📊 **完整评估** | 速度、质量、内存的全面对比分析 |
-
----
-
-## ⚠️ 重要概念：模拟量化 vs 真实量化
-
-在使用本项目之前，请务必理解这两种量化方式的**本质区别**：
-
-### 🔬 模拟量化 (Simulated Quantization)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  模拟量化流程（本项目的 mixed_precision_ptq.py）                 │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   FP32 权重 ──→ 量化(round) ──→ 反量化 ──→ FP32 权重(有损失)    │
-│                                                                 │
-│   • 计算仍然是 FP32，只是模拟低精度带来的精度损失               │
-│   • ❌ 不会加速，反而因为额外操作变慢                            │
-│   • ✅ 用于评估量化对模型精度的影响                              │
-│   • ✅ 用于搜索最优的量化配置                                    │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 🚀 真实量化 (Real Quantization)
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  真实量化流程（llama.cpp / bitsandbytes / TensorRT）            │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                 │
-│   FP32 权重 ──→ 转换为 INT4/INT8 ──→ 存储为 GGUF 格式           │
-│                                                                 │
-│   • 计算直接使用低精度整数运算（硬件加速）                      │
-│   • ✅ 真正加速推理（5-10x）                                     │
-│   • ✅ 大幅减少内存占用（70-85%）                                │
-│   • ✅ 适合生产部署                                              │
-│                                                                 │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### 📊 实测性能对比
-
-| 方式 | 原始模型 (FP16) | 模拟量化 | 真实量化 (Q4_K_M) | 混合精度 GGUF |
-|------|-----------------|----------|-------------------|---------------|
-| **推理速度** | 14.7 tok/s | 0.8 tok/s ❌ | 68.5 tok/s ✅ | 53.5 tok/s ✅ |
-| **内存占用** | ~14.2 GB | ~14.2 GB | 4.36 GB ✅ | 8.54 GB ✅ |
-| **压缩比** | 1.0x | 1.0x | 3.3x | 1.7x |
-| **用途** | 基准 | 配置搜索 | 生产部署 | 生产部署 |
-
-> 💡 **结论**：想要真正的加速效果，必须使用**真实量化**！
-
----
-
-## 🚀 快速开始
-
-### 1. 环境安装
+### 30秒体验真实量化加速
 
 ```bash
-# 克隆项目
-git clone https://github.com/your-username/Qwen2.5-7B_W2-8A8_MIXED_PTQ.git
-cd Qwen2.5-7B_W2-8A8_MIXED_PTQ
-
-# 创建虚拟环境
-python3 -m venv .venv
-source .venv/bin/activate  # Windows: .venv\Scripts\activate
-
-# 安装核心依赖
+# 1. 安装依赖
 pip install -r requirements.txt
+CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python  # macOS
+# CMAKE_ARGS="-DLLAMA_CUDA=on" pip install llama-cpp-python  # Linux/CUDA
 
-# 安装 llama-cpp-python（用于真实量化推理）
-# macOS (Metal 加速)
-CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
-
-# Linux/Windows (CUDA 加速)
-CMAKE_ARGS="-DLLAMA_CUDA=on" pip install llama-cpp-python
-```
-
-### 2. 下载预量化模型
-
-```bash
-# 下载 Q4_K_M 量化模型（4.36 GB）
+# 2. 下载预量化模型 (4.36 GB)
 huggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF \
     Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir models
+
+# 3. 运行对比测试
+python compare_real_quant.py --max_tokens 200
 ```
 
-### 3. 运行对比测试
+### 完整工作流 (自定义混合精度配置)
 
 ```bash
-# 快速对比测试（推荐！）
-python compare_real_quant.py --max_tokens 200
+# 步骤1: 敏感度分析 + 遗传算法搜索最优配置 (~30-60分钟)
+python mixed_precision_ptq.py --device mps --target_compression 0.25
 
-# 完整三模型对比
+# 步骤2: 导出为 GGUF 格式 (~5分钟)  
+python export_gguf_official.py --output models/qwen2.5-7b-mixed.gguf
+
+# 步骤3: 三模型对比测试
 python compare_three_models.py --max_tokens 200
 ```
 
 ---
 
-## 📁 项目结构
+## 📁 项目架构
 
 ```
 Qwen2.5-7B_W2-8A8_MIXED_PTQ/
 │
-├── 📄 README.md                     # 项目说明文档
-├── 📄 requirements.txt              # Python 依赖
-├── 📄 .gitignore                    # Git 忽略规则
+├── 🔧 核心模块
+│   ├── quant_utils.py              # 量化核心函数 (模拟量化、SmoothQuant)
+│   ├── genetic_optim.py            # 遗传算法优化器 (搜索最优W2/W4/W8配置)
+│   └── data_utils.py               # 校准数据加载 (WikiText-2等)
 │
-├── 🔧 【核心模块】
-├── quant_utils.py                   # 量化核心函数库
-│   ├── quantize_tensor()            #   - 张量量化函数
-│   ├── SmoothQuantLinear            #   - SmoothQuant 线性层
-│   └── MixedPrecisionLinear         #   - 混合精度线性层
+├── ⚙️ 主程序
+│   ├── mixed_precision_ptq.py      # 混合精度量化主程序 (敏感度分析+GA搜索)
+│   └── export_gguf_official.py     # GGUF格式导出 (llama.cpp兼容)
 │
-├── genetic_optim.py                 # 遗传算法优化器
-│   ├── MixedPrecisionGA             #   - 遗传算法主类
-│   ├── LayerSensitivityAnalyzer     #   - 层敏感度分析
-│   └── fitness_function()           #   - 适应度评估函数
+├── 🧪 测试脚本
+│   ├── compare_real_quant.py       # ✅ 真实量化对比 (推荐！能获得加速)
+│   ├── compare_three_models.py     # 三模型全面对比
+│   └── test_simulated_quant.py     # ⚠️ 模拟量化测试 (仅验证精度)
 │
-├── data_utils.py                    # 数据工具函数
-│   ├── get_calib_dataset()          #   - 加载校准数据集
-│   └── create_mock_input()          #   - 创建模拟输入
+├── 📄 配置文件
+│   ├── requirements.txt            # Python依赖
+│   ├── mixed_precision_config.pt   # 量化配置 (每层位宽)
+│   └── README.md                   # 项目说明
 │
-├── ⚙️ 【主程序】
-├── mixed_precision_ptq.py           # 混合精度量化主程序
-│                                    #   - 敏感度分析
-│                                    #   - 遗传算法搜索
-│                                    #   - 配置保存
-│
-├── export_gguf_official.py          # GGUF 格式导出
-│                                    #   - 使用官方 gguf 库
-│                                    #   - 生成 llama.cpp 兼容格式
-│
-├── 🧪 【测试脚本】
-├── test_mixed_precision.py          # 模拟量化推理测试
-├── compare_models.py                # 模拟量化 vs 原始模型
-├── compare_real_quant.py            # 真实量化 vs 原始模型
-└── compare_three_models.py          # 三模型全面对比
-│
-├── 📦 【输出文件】
-├── mixed_precision_config.pt        # 量化配置（每层位宽）
-└── models/                          # 模型文件目录
-    ├── Qwen2.5-7B-Instruct-Q4_K_M.gguf  # Q4_K_M 统一量化
-    └── qwen2.5-7b-mixed.gguf            # 混合精度量化
+└── 📦 模型目录
+    └── models/                     # GGUF模型文件
 ```
 
 ---
 
 ## 📖 使用指南
 
-### 方案 A：完整工作流（推荐）
-
-适合想要自定义量化配置的用户。
+### 1️⃣ 混合精度量化配置搜索
 
 ```bash
-# 第1步：运行混合精度搜索（约 30-60 分钟）
 python mixed_precision_ptq.py \
-    --device mps \              # 或 cuda
-    --ga_gen 15 \               # 遗传算法代数
-    --target_compression 0.25   # 目标压缩比
-
-# 第2步：导出为 GGUF 格式（约 5 分钟）
-python export_gguf_official.py \
-    --output models/qwen2.5-7b-mixed.gguf
-
-# 第3步：运行三模型对比测试
-python compare_three_models.py --max_tokens 200
+    --model_id Qwen/Qwen2.5-7B-Instruct \  # 模型ID
+    --device mps \                          # 设备: cuda/mps/cpu
+    --ga_pop 20 \                           # 遗传算法种群大小
+    --ga_gen 15 \                           # 遗传算法迭代代数
+    --target_compression 0.25               # 目标压缩比 (25%)
 ```
 
-### 方案 B：快速体验
+**输出**: `mixed_precision_config.pt` - 每层的量化位宽配置
 
-适合只想体验真实量化效果的用户。
+### 2️⃣ 导出 GGUF 格式
 
 ```bash
-# 下载预量化模型
-huggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF \
-    Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir models
+python export_gguf_official.py \
+    --model_id Qwen/Qwen2.5-7B-Instruct \
+    --config mixed_precision_config.pt \
+    --output models/qwen2.5-7b-mixed.gguf
+```
 
-# 运行真实量化对比
+### 3️⃣ 推理测试
+
+```bash
+# 真实量化对比 (推荐！)
 python compare_real_quant.py --max_tokens 200
+
+# 三模型对比 (原始 vs Q4_K_M vs 混合精度)
+python compare_three_models.py --skip_original --max_tokens 200
+
+# 模拟量化测试 (仅验证精度，不会加速)
+python test_simulated_quant.py --prompt "什么是量子计算？"
 ```
 
 ---
 
-## ⌨️ 命令行参数
+## 🎯 核心概念
 
-### mixed_precision_ptq.py
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--model_id` | `Qwen/Qwen2.5-7B-Instruct` | HuggingFace 模型 ID |
-| `--device` | 自动检测 | 计算设备：`cuda`、`mps`、`cpu` |
-| `--ga_pop` | 20 | 遗传算法种群大小 |
-| `--ga_gen` | 12 | 遗传算法迭代代数 |
-| `--target_compression` | 0.25 | 目标压缩比 (0.25 = 25%) |
-| `--output` | `mixed_precision_config.pt` | 输出配置文件路径 |
-
-### compare_three_models.py
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--model_id` | `Qwen/Qwen2.5-7B-Instruct` | 原始模型 ID |
-| `--q4km_path` | `models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` | Q4_K_M 模型路径 |
-| `--mixed_path` | `models/qwen2.5-7b-mixed.gguf` | 混合精度模型路径 |
-| `--max_tokens` | 200 | 最大生成 token 数 |
-| `--skip_original` | False | 跳过原始模型测试 |
-
-### compare_real_quant.py
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--model_id` | `Qwen/Qwen2.5-7B-Instruct` | 原始模型 ID |
-| `--gguf_path` | `models/Qwen2.5-7B-Instruct-Q4_K_M.gguf` | GGUF 模型路径 |
-| `--max_tokens` | 200 | 最大生成 token 数 |
-
-### export_gguf_official.py
-
-| 参数 | 默认值 | 说明 |
-|------|--------|------|
-| `--model_id` | `Qwen/Qwen2.5-7B-Instruct` | 原始模型 ID |
-| `--config` | `mixed_precision_config.pt` | 量化配置文件 |
-| `--output` | `models/qwen2.5-7b-mixed.gguf` | 输出 GGUF 路径 |
-
----
-
-## 🔬 技术原理
-
-### 1. 混合精度策略
-
-不同类型的层对量化的敏感度不同：
-
-| 层类型 | 敏感度 | 推荐位宽 | 原因 |
-|--------|--------|----------|------|
-| Attention Q/K | 高 | W8 | 影响注意力计算精度 |
-| Attention V/O | 中 | W4 | 信息传递层 |
-| FFN Gate/Up | 中 | W4 | 激活函数相关 |
-| FFN Down | 低 | W2-W4 | 输出投影层 |
-| Embedding | 低 | W2-W4 | 词嵌入查表 |
-| LayerNorm | 高 | FP32 | 归一化需要高精度 |
-
-### 2. 遗传算法优化
+### 模拟量化 vs 真实量化
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│  遗传算法搜索最优位宽配置                                     │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│  1. 初始化：随机生成 N 个位宽配置（染色体）                   │
-│       每个染色体 = [layer0_bits, layer1_bits, ..., layerN]   │
-│                                                              │
-│  2. 适应度评估：                                              │
-│       fitness = α × (1/MSE) + β × 压缩率                     │
-│       MSE = 量化前后输出的均方误差                            │
-│                                                              │
-│  3. 选择：锦标赛选择，保留优秀个体                            │
-│                                                              │
-│  4. 交叉：单点交叉产生子代                                    │
-│       父代A: [4,4,8,2,4,8,...]                                │
-│       父代B: [8,4,4,4,2,4,...]                                │
-│                    ↓ 交叉点                                   │
-│       子代:  [4,4,8|4,2,4,...]                                │
-│                                                              │
-│  5. 变异：随机改变部分基因                                    │
-│       [4,4,8,4,2,4,...] → [4,4,8,8,2,4,...]                   │
-│                                                              │
-│  6. 迭代：重复 2-5 直到收敛或达到最大代数                     │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────┐
+│  ⚠️ 模拟量化 (Simulated) - 用于配置搜索                            │
+├─────────────────────────────────────────────────────────────────────┤
+│  FP32 → 量化(round) → 反量化 → FP32                                 │
+│  • 数据类型始终是 FP32，只模拟精度损失                              │
+│  • ❌ 不会加速 (反而更慢)                                            │
+│  • ✅ 用于评估量化配置的精度影响                                     │
+└─────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────┐
+│  ✅ 真实量化 (Real) - 用于生产部署                                   │
+├─────────────────────────────────────────────────────────────────────┤
+│  FP32 → INT4/INT8 → GGUF格式 → llama.cpp推理                        │
+│  • 使用低精度整数运算，硬件加速                                     │
+│  • ✅ 推理加速 5-10x                                                 │
+│  • ✅ 内存减少 70-85%                                                │
+└─────────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. SmoothQuant 技术
+### W2/W4/W8 + A8 策略
 
-将激活值的量化难度转移到权重，使两者更容易量化：
+| 组件 | 位宽 | 量化方式 | 说明 |
+|------|------|----------|------|
+| **权重 (W)** | 2/4/8-bit 可变 | 对称量化 + 分组(g=128) | 根据层敏感度选择 |
+| **激活 (A)** | 8-bit 固定 | 非对称量化 (per-tensor) | 统一8位简化硬件 |
 
-```python
-# 原始计算
-Y = X @ W
+### 层敏感度分类
 
-# SmoothQuant 变换
-s = (max|X|^α) / (max|W|^(1-α))  # α=0.5 时平衡
-X' = X / s      # 激活值缩小
-W' = W * s      # 权重放大
-Y = X' @ W'     # 结果不变，但两者都更易量化
-```
+| 敏感度 | MSE阈值 | 推荐配置 | 典型层类型 |
+|--------|---------|----------|------------|
+| 低 | < 0.1 | W2 + A8 | FFN Down, 部分Embedding |
+| 中 | 0.1~0.5 | W4 + A8 | Attention V/O, FFN Gate/Up |
+| 高 | ≥ 0.5 | W8 + A8 | Attention Q/K |
 
 ---
 
 ## 📊 性能对比
 
-在 Apple M4 Max (Metal) 上的测试结果：
+**测试环境**: Apple M4 Max, 32GB RAM
 
-| 模型 | 大小 | 加载时间 | 推理速度 | 内存占用 |
-|------|------|----------|----------|----------|
-| 原始 (FP16) | ~14.2 GB | ~3s | 14.7 tok/s | ~30 GB |
-| Q4_K_M | 4.36 GB | ~1s | **68.5 tok/s** | ~5 GB |
-| 混合精度 | 8.54 GB | ~2s | 53.5 tok/s | ~9 GB |
+| 模型 | 大小 | 推理速度 | 内存占用 | 加速比 |
+|------|------|----------|----------|--------|
+| 原始 (FP16) | 14.2 GB | 14.7 tok/s | ~30 GB | 1.0x |
+| Q4_K_M | 4.36 GB | **68.5 tok/s** | ~5 GB | **4.7x** |
+| 混合精度 | 8.54 GB | 53.5 tok/s | ~9 GB | 3.6x |
+| 模拟量化 | 14.2 GB | 0.8 tok/s ❌ | ~30 GB | 0.05x |
 
-**关键指标：**
-- Q4_K_M 比原始模型快 **4.7x**
-- Q4_K_M 内存减少 **83%**
-- 混合精度比原始模型快 **3.6x**
+> 💡 **结论**: 真实量化能获得 **5-10x 加速**，模拟量化只用于配置搜索！
 
 ---
 
 ## ❓ 常见问题
 
-### Q1: 为什么模拟量化后推理更慢了？
+<details>
+<summary><b>Q: 为什么模拟量化后更慢了？</b></summary>
 
-**A**: 这是正常的！模拟量化在 FP32 基础上增加了额外的计算（scale/clamp/round），只是模拟精度损失，不会加速。想要加速必须用**真实量化**。
+这是正常的！模拟量化在 FP32 基础上增加了额外的量化/反量化操作，只是模拟精度损失，不会加速。想要真正加速，请使用 `compare_real_quant.py`。
+</details>
 
-### Q2: 如何获得真正的加速效果？
+<details>
+<summary><b>Q: MPS设备报错怎么办？</b></summary>
 
-**A**: 使用真实量化：
-```bash
-python compare_real_quant.py --max_tokens 200
-```
-
-### Q3: MPS 设备报错怎么办？
-
-**A**: 
-1. 确保使用 `torch.float32` 精度（MPS 对 FP16 支持有限）
-2. 更新 PyTorch 到最新版本
-3. 对于 llama.cpp，确保编译时启用 Metal：
+1. 使用 `torch.float32` (MPS对FP16支持有限)
+2. 更新 PyTorch: `pip install --upgrade torch`
+3. 重新编译 llama-cpp-python:
    ```bash
    CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python --force-reinstall
    ```
+</details>
 
-### Q4: 量化后输出乱码或质量下降？
+<details>
+<summary><b>Q: 量化后输出乱码？</b></summary>
 
-**A**: W2 层过多可能导致精度损失。调整目标压缩比：
+W2层过多可能导致精度损失，调整目标压缩比:
 ```bash
-python mixed_precision_ptq.py --target_compression 0.35
+python mixed_precision_ptq.py --target_compression 0.35  # 提高到35%
 ```
+</details>
 
-### Q5: 输出的句子不完整？
+<details>
+<summary><b>Q: 如何跳过原始模型测试（节省内存）？</b></summary>
 
-**A**: 这是 **token 数量限制**问题，不是量化质量问题。增加 `--max_tokens`：
-```bash
-python compare_three_models.py --max_tokens 300
-```
-
-### Q6: 如何只测试 GGUF 模型（不加载原始模型）？
-
-**A**: 使用 `--skip_original` 参数节省内存：
 ```bash
 python compare_three_models.py --skip_original --max_tokens 200
 ```
+</details>
 
 ---
 
 ## 💻 硬件要求
 
-| 设备 | 最低要求 | 推荐配置 |
+| 设备 | 最低配置 | 推荐配置 |
 |------|----------|----------|
-| **CUDA GPU** | 16GB VRAM | 24GB+ VRAM (A100/4090) |
-| **Apple Silicon** | M1 16GB | M2 Pro 32GB+ |
-| **CPU** | 32GB RAM | 64GB+ RAM |
-
-> 💡 对于 Apple Silicon，推荐使用 Metal 加速：
-> ```bash
-> CMAKE_ARGS="-DLLAMA_METAL=on" pip install llama-cpp-python
-> ```
+| CUDA GPU | 16GB VRAM | 24GB+ (A100/4090) |
+| Apple Silicon | M1 16GB | M2 Pro 32GB+ |
+| CPU | 32GB RAM | 64GB+ RAM |
 
 ---
 
 ## 📚 参考文献
 
-- [SmoothQuant: Accurate and Efficient Post-Training Quantization](https://arxiv.org/abs/2211.10438)
-- [GPTQ: Accurate Post-Training Quantization for Generative Pre-trained Transformers](https://arxiv.org/abs/2210.17323)
-- [AWQ: Activation-aware Weight Quantization](https://arxiv.org/abs/2306.00978)
-- [Qwen2.5 Technical Report](https://github.com/QwenLM/Qwen2.5)
-- [llama.cpp](https://github.com/ggerganov/llama.cpp)
-- [GGUF Format Specification](https://github.com/ggerganov/ggml/blob/master/docs/gguf.md)
+- [SmoothQuant](https://arxiv.org/abs/2211.10438) - 激活值平滑量化
+- [GPTQ](https://arxiv.org/abs/2210.17323) - 后训练量化
+- [AWQ](https://arxiv.org/abs/2306.00978) - 激活感知量化
+- [llama.cpp](https://github.com/ggerganov/llama.cpp) - GGUF推理引擎
+- [Qwen2.5](https://github.com/QwenLM/Qwen2.5) - 模型官方仓库
 
 ---
 
 ## 📄 License
 
-本项目采用 MIT License 开源协议。
-
----
-
-## 👤 作者
-
-**Jiangsheng Yu**
-
-- GitHub: [@yujiangsheng](https://github.com/yujiangsheng)
+MIT License © 2024 Jiangsheng Yu
 
 ---
 
 <p align="center">
-  如果这个项目对你有帮助，请给个 ⭐ Star！
+  ⭐ 如果这个项目对你有帮助，请给个 Star！
 </p>

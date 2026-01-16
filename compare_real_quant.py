@@ -2,36 +2,37 @@
 真实量化对比测试 (Real Quantization Comparison)
 ===============================================
 
-本脚本对比【原始模型】与【真实量化模型】的推理性能。
+✅ 推荐使用！使用 llama.cpp 进行真正的低精度推理，获得实际加速效果。
 
-⚠️ 重要说明：
------------
-这是真实量化测试，使用 llama.cpp 进行真正的低精度推理（INT4）。
-与模拟量化不同，真实量化可以获得实际的加速效果！
+===============================================================
+混合精度量化策略: W2/W4/W8 + A8 (权重可变位宽 + 固定8位激活)
+===============================================================
 
-典型结果：
----------
-- 推理速度：提升 5-10 倍
-- 内存占用：减少 70-85%
-- 回答质量：接近原始模型
+本脚本对比【原始模型】与【真实量化模型 (GGUF)】的推理性能。
+
+典型性能提升：
+-------------
+  • 推理速度: 提升 5-10x (如 14.7 → 68.5 tok/s)
+  • 内存占用: 减少 70-85% (如 14GB → 4GB)
+  • 模型大小: 压缩 3-4x
 
 支持的加速后端：
 --------------
-- macOS: Metal (Apple Silicon GPU)
-- Linux/Windows: CUDA (NVIDIA GPU)
-- CPU: 所有平台
+  • macOS: Metal (Apple Silicon GPU)
+  • Linux/Windows: CUDA (NVIDIA GPU)
+  • 通用: CPU (所有平台)
 
 使用方法：
 ---------
-# 默认测试（需要先下载 GGUF 模型）
->>> python compare_real_quant.py
-
-# 自定义测试
->>> python compare_real_quant.py --max_tokens 200
-
-# 下载 GGUF 模型
->>> huggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF \\
-...     Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir models
+  # 1. 下载 GGUF 模型
+  huggingface-cli download bartowski/Qwen2.5-7B-Instruct-GGUF \\
+      Qwen2.5-7B-Instruct-Q4_K_M.gguf --local-dir models
+  
+  # 2. 运行对比测试
+  python compare_real_quant.py --max_tokens 200
+  
+  # 3. 自定义模型路径
+  python compare_real_quant.py --gguf_path models/my_model.gguf
 """
 
 import torch

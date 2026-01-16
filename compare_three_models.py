@@ -1,33 +1,37 @@
 """
-三模型对比测试脚本
-==================
+三模型全面对比测试 (Three-Model Comparison)
+==========================================
 
-功能说明：
+对比三种模型的推理性能和输出质量，全面评估量化效果。
+
+===============================================================
+混合精度量化策略: W2/W4/W8 + A8 (权重可变位宽 + 固定8位激活)
+===============================================================
+
+对比模型：
 ---------
-对比三种模型的推理性能和输出质量：
-    1. 原始模型 (FP32/FP16) - 使用 Transformers 库
-    2. Q4_K_M 统一量化 (4-bit) - 使用 llama.cpp (GGUF格式)
-    3. 混合精度量化 (W2/W4/W8) - 使用 llama.cpp (自定义GGUF)
+  1. 原始模型 (FP32/FP16) - 使用 Transformers 库
+  2. Q4_K_M 统一量化 - 使用 llama.cpp (GGUF格式)
+  3. 混合精度量化 (W2/W4/W8 + A8) - 使用 llama.cpp (自定义GGUF)
 
 测试指标：
 ---------
-    - 推理速度 (tokens/second)
-    - 生成质量 (输出文本对比)
-    - 模型大小 (GB)
-    - 内存占用
+  • 推理速度 (tokens/second)
+  • 生成质量 (输出文本对比)
+  • 模型大小 (GB)
+  • 内存占用
 
 使用方法：
 ---------
-    # 基础用法（跳过原始模型以节省内存）
-    >>> python compare_three_models.py --skip_original
-    
-    # 完整对比（需要足够内存）
-    >>> python compare_three_models.py --max_tokens 200
-    
-    # 自定义生成长度
-    >>> python compare_three_models.py --max_tokens 300 --skip_original
-
-作者：Jiangsheng Yu
+  # 跳过原始模型测试（节省内存，推荐）
+  python compare_three_models.py --skip_original --max_tokens 200
+  
+  # 完整三模型对比（需要足够内存 ~30GB）
+  python compare_three_models.py --max_tokens 200
+  
+  # 自定义模型路径
+  python compare_three_models.py --q4km_path models/Q4_K_M.gguf \\
+      --mixed_path models/mixed.gguf
 """
 
 import torch
@@ -60,10 +64,7 @@ def get_device() -> str:
     """
     自动检测最佳计算设备
     
-    检测顺序：
-        1. CUDA (NVIDIA GPU)
-        2. MPS (Apple Silicon)
-        3. CPU (通用后备)
+    检测顺序: CUDA > MPS > CPU
     
     返回:
         str: 设备名称 ('cuda', 'mps', 或 'cpu')
